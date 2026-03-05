@@ -28,7 +28,8 @@
           "name": "mcp-server-youtube-transcript",
           "url": "https://github.com/kimtaeyoon83/mcp-server-youtube-transcript",
           "path": "/root/clawd/mcp-server-youtube-transcript",
-          "install": "git clone https://github.com/kimtaeyoon83/mcp-server-youtube-transcript.git /root/clawd/mcp-server-youtube-transcript && cd /root/clawd/mcp-server-youtube-transcript && npm install && npm run build"
+          "pinned_ref_required": true,
+          "install": "echo 'Manual install required: review upstream, pin an immutable commit SHA, then install deliberately.' && exit 1"
         }
       ]
     }

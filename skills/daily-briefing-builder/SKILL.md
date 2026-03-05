@@ -5,9 +5,9 @@ description: Generate a clean morning brief in Claude Code — pulls today's pri
 
 # Daily Briefing Builder
 
-Generates a morning brief from your Obsidian vault. Reads today's action file, scans for unposted content, and fetches weather — all inside a Claude Code session.
+Generates a morning brief from your Obsidian vault. Reads today's action file, scans for unposted content, and can fetch weather with explicit approval — all inside a Claude Code session.
 
-No APIs. No paid services. No agent autonomy required. You run it, you get your brief.
+No paid services. No agent autonomy required. You run it, you get your brief.
 
 ---
 
@@ -38,16 +38,18 @@ When this skill is invoked, follow these phases exactly.
 Check whether the user has provided:
 - `vault_path` — absolute path to their Obsidian vault
 - `city` — city name for weather (wttr.in format, spaces as `+`)
+- `allow_network_weather` — `yes` or `no` (required for weather fetch)
 
 **If either is missing, ask before proceeding:**
 
 ```
-To run your morning brief, I need two things:
+To run your morning brief, I need three things:
 1. Your vault path (e.g. /root/obsidian-vault)
 2. Your city for weather (e.g. Ann+Arbor or London)
+3. Weather network check: allow external call to wttr.in? (yes/no)
 ```
 
-Do not proceed to PHASE 2 until both values are confirmed.
+Do not proceed to PHASE 2 until all values are confirmed.
 
 ---
 
@@ -95,7 +97,11 @@ fi
 **Step 3 — Weather:**
 
 ```bash
-curl -s --max-time 5 "wttr.in/CITY_HERE?format=3" || echo "WEATHER_UNAVAILABLE"
+if [ "${ALLOW_NETWORK_WEATHER:-no}" = "yes" ]; then
+  curl -s --max-time 5 "wttr.in/CITY_HERE?format=3" || echo "WEATHER_UNAVAILABLE"
+else
+  echo "WEATHER_SKIPPED_NO_NETWORK_APPROVAL"
+fi
 ```
 
 ---
@@ -124,6 +130,7 @@ WEATHER
 - If no unposted files: `Content queue is empty`
 - If actions file missing: `No actions file for today — create one at bambf/tracking/daily-actions/YYYY-MM-DD.md`
 - If weather fails: `Weather unavailable (offline)` — do not abort the brief
+- If weather network not approved: `Weather skipped (network not approved)` — do not abort the brief
 
 ---
 

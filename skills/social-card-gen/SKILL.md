@@ -124,7 +124,7 @@ node generate.js --text "We reduced onboarding time by 35% with a checklist." --
 node generate.js --file examples/input-example.md --outdir examples
 
 # URL input (when network is available)
-node generate.js --url https://example.com/post --platforms twitter,linkedin --stdout
+node generate.js --url https://example.com/post --allow-network --platforms twitter,linkedin --stdout
 ```
 
 If `generate.js` is unavailable, use the Manual Generation Path above — same quality, just manual.

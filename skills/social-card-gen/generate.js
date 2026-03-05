@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 
+const dns = require('node:dns').promises;
 const fs = require('node:fs');
+const net = require('node:net');
 const path = require('node:path');
 const { extractKeywords, renderTemplate, PLATFORM_CONFIGS } = require('./templates');
 
 function printHelp() {
-  console.log(`social-card-gen\n\nUsage:\n  node generate.js [options]\n\nInput options (use one):\n  --text "..."           Raw text input\n  --file ./path.md        Read content from local file\n  --url https://...       Read content from URL\n\nOutput options:\n  --platforms list        Comma-separated: twitter,linkedin,reddit (default: all)\n  --outdir ./dir          Write files to directory (default: current directory)\n  --stdout                Print generated cards to stdout instead of files\n  --prefix output-        Output filename prefix (default: output-)\n  --title "Custom title" Override title extraction\n\nExamples:\n  node generate.js --text "We reduced deploy time by 42%" --stdout\n  node generate.js --file examples/input-example.md --outdir examples\n  node generate.js --url https://example.com/post --platforms twitter,linkedin --stdout\n`);
+  console.log(`social-card-gen\n\nUsage:\n  node generate.js [options]\n\nInput options (use one):\n  --text "..."            Raw text input\n  --file ./path.md         Read content from local file\n  --url https://...        Read content from URL (requires --allow-network)\n  --allow-network          Explicitly allow outbound URL fetches\n\nOutput options:\n  --platforms list         Comma-separated: twitter,linkedin,reddit (default: all)\n  --outdir ./dir           Write files to directory (default: current directory)\n  --stdout                 Print generated cards to stdout instead of files\n  --prefix output-         Output filename prefix (default: output-)\n  --title "Custom title"  Override title extraction\n\nExamples:\n  node generate.js --text "We reduced deploy time by 42%" --stdout\n  node generate.js --file examples/input-example.md --outdir examples\n  node generate.js --url https://example.com/post --allow-network --platforms twitter,linkedin --stdout\n`);
 }
 
 function parseArgs(argv) {
@@ -37,6 +39,11 @@ function parseArgs(argv) {
 
     if (arg === '--url') {
       options.url = argv[++i];
+      continue;
+    }
+
+    if (arg === '--allow-network') {
+      options.allowNetwork = true;
       continue;
     }
 
@@ -77,6 +84,72 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+function isPrivateIpv4(ip) {
+  const parts = ip.split('.').map((p) => Number(p));
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+  if (parts[0] === 10) return true;
+  if (parts[0] === 127) return true;
+  if (parts[0] === 0) return true;
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+  if (parts[0] >= 224) return true; // multicast/reserved
+  return false;
+}
+
+function isPrivateIpv6(ip) {
+  const normalized = ip.toLowerCase();
+  return normalized === '::1'
+    || normalized === '::'
+    || normalized.startsWith('fc')
+    || normalized.startsWith('fd')
+    || normalized.startsWith('fe80')
+    || normalized.startsWith('::ffff:127.')
+    || normalized.startsWith('::ffff:10.')
+    || normalized.startsWith('::ffff:192.168.')
+    || /^::ffff:172\.(1[6-9]|2\d|3[0-1])\./.test(normalized);
+}
+
+function isPrivateIp(ip) {
+  const family = net.isIP(ip);
+  if (family === 4) return isPrivateIpv4(ip);
+  if (family === 6) return isPrivateIpv6(ip);
+  return true;
+}
+
+async function validateUrlSafety(rawUrl) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(`Invalid URL: ${rawUrl}`);
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`Only https URLs are allowed: ${rawUrl}`);
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (host === 'localhost' || host.endsWith('.localhost')) {
+    throw new Error(`Blocked local hostname: ${host}`);
+  }
+
+  if (net.isIP(host) && isPrivateIp(host)) {
+    throw new Error(`Blocked private or reserved IP target: ${host}`);
+  }
+
+  const records = await dns.lookup(host, { all: true });
+  if (!records || records.length === 0) {
+    throw new Error(`Could not resolve hostname: ${host}`);
+  }
+  for (const record of records) {
+    if (isPrivateIp(record.address)) {
+      throw new Error(`Blocked private or reserved DNS target: ${host} -> ${record.address}`);
+    }
+  }
 }
 
 function stripMarkdownAndHtml(input) {
@@ -154,7 +227,14 @@ async function loadInput(options) {
   }
 
   if (options.url) {
-    const response = await fetch(options.url);
+    if (!options.allowNetwork) {
+      throw new Error('URL input requires --allow-network. Use --text or --file for offline mode.');
+    }
+    await validateUrlSafety(options.url);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(options.url, { redirect: 'error', signal: controller.signal })
+      .finally(() => clearTimeout(timeoutId));
     if (!response.ok) {
       throw new Error(`Failed to fetch URL (${response.status}): ${options.url}`);
     }

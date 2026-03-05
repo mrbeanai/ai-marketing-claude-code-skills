@@ -60,6 +60,15 @@ source ~/.openclaw/credentials/bird.env && bird search "test" -n 1
 # Otherwise falls back to Reddit web search via Brave
 ```
 
+## Security Guardrails (Required)
+
+- Require explicit user approval before:
+  - Sourcing credentials (`source ~/.openclaw/credentials/bird.env`)
+  - Running external network searches (Brave, Reddit, X/Bird)
+- Do not print credential values or environment contents.
+- If approval is denied, continue in local/offline mode and report which data sources were skipped.
+- Only query domains relevant to the requested topic; avoid broad or unrelated crawling.
+
 **Quick verification:**
 ```bash
 /last30days --check-setup

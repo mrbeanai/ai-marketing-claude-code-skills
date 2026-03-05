@@ -37,12 +37,23 @@ Activate this skill when:
 **Required:** MCP YouTube Transcript server must be installed at:
 `/root/clawd/mcp-server-youtube-transcript`
 
-If not present, install it:
+## Security Guardrails (Required)
+
+- Never auto-install, auto-update, or auto-run remote code.
+- Require explicit user approval before any network command (`git clone`, `git pull`, `npm install`, transcript fetches).
+- Use a pinned immutable commit SHA for third-party repos. Do not use floating `main`/`master`.
+- Do not send transcripts to external channels (Telegram, etc.) unless the user explicitly asks in that run.
+
+If not present, provide manual install steps (approval required):
 ```bash
 cd /root/clawd
 git clone https://github.com/kimtaeyoon83/mcp-server-youtube-transcript.git
 cd mcp-server-youtube-transcript
-npm install && npm run build
+# Pin to a reviewed commit before install:
+git checkout <PINNED_COMMIT_SHA>
+# Prefer deterministic install:
+npm ci --ignore-scripts
+npm run build
 ```
 
 ## Workflow
@@ -122,9 +133,9 @@ Include in the file:
 - Full transcript text
 - URL reference for easy lookup
 
-### 6. Platform-Specific Delivery
+### 6. Platform-Specific Delivery (Opt-In Only)
 
-**If channel is Telegram:**
+**If channel is Telegram and user explicitly approved external send in this run:**
 ```bash
 message --action send --channel telegram --target CHAT_ID \
   --filePath /root/clawd/transcripts/YYYY-MM-DD_VIDEO_ID.txt \
@@ -205,7 +216,7 @@ Don't ask "Will AI replace me?" Ask "How can I use AI to become 10× more valuab
 
 **If MCP server not installed:**
 - Provide installation instructions
-- Offer to install it automatically if in appropriate context
+- Do not install automatically; wait for explicit user approval
 
 **If video ID extraction fails:**
 - Ask user to provide the full YouTube URL or video ID
@@ -341,23 +352,29 @@ youtube-summarizer [URL] --lang es
 ## Installation & Setup
 
 ```bash
-# 1. Clone and install MCP server
+# 1. Clone MCP server (approval required)
 cd /root/clawd
 git clone https://github.com/kimtaeyoon83/mcp-server-youtube-transcript.git
 cd mcp-server-youtube-transcript
-npm install && npm run build
 
-# 2. Test installation
+# 2. Pin to a reviewed immutable commit
+git checkout <PINNED_COMMIT_SHA>
+
+# 3. Install/build deterministically
+npm ci --ignore-scripts
+npm run build
+
+# 4. Test installation
 node --input-type=module -e "
 import { getSubtitles } from './dist/youtube-fetcher.js';
 const result = await getSubtitles({ videoID: 'dQw4w9WgXcQ', lang: 'en' });
 console.log(result.metadata.title);
 "
 
-# 3. Create transcripts directory
+# 5. Create transcripts directory
 mkdir -p /root/clawd/transcripts
 
-# 4. Verify skill is ready
+# 6. Verify skill is ready
 youtube-summarizer --check-setup
 ```
 
@@ -369,7 +386,8 @@ youtube-summarizer --check-setup
 
 **Issue:** "Failed to fetch transcript" (on VPS)
 - **Cause:** YouTube may have updated their API
-- **Fix:** Update MCP server: `cd /root/clawd/mcp-server-youtube-transcript && git pull && npm install && npm run build`
+- **Fix:** Update MCP server with explicit approval and pinned SHA:
+  `cd /root/clawd/mcp-server-youtube-transcript && git fetch --tags && git checkout <NEW_REVIEWED_PINNED_SHA> && npm ci --ignore-scripts && npm run build`
 
 **Issue:** "Video ID not recognized"
 - **Cause:** Malformed URL or unsupported format
